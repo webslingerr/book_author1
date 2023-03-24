@@ -7,7 +7,7 @@ type Author struct {
 	UpdatedAt string `json:"updated_at"`
 }
 
-type ReturnAuther struct {
+type ReturnAuthor struct {
 	Id   string `json:"id"`
 	Name string `json:"name"`
 }

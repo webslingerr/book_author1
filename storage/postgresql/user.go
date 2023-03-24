@@ -3,35 +3,40 @@ package postgresql
 import (
 	"app/api/models"
 	"app/pkg/helper"
-	"fmt"
-
 	"database/sql"
+	"fmt"
 
 	"github.com/google/uuid"
 )
 
-type authorRepo struct {
+type userRepo struct {
 	db *sql.DB
 }
 
-func NewAuthorRepo(db *sql.DB) *authorRepo {
-	return &authorRepo{
+func NewUserRepo(db *sql.DB) *userRepo {
+	return &userRepo{
 		db: db,
 	}
 }
 
-func (a *authorRepo) Create(req *models.CreateAuthor) (string, error) {
+func (u *userRepo) Create(req *models.CreateUser) (string, error) {
+
 	var (
 		query string
 		id    = uuid.New().String()
 	)
 
 	query = `
-		INSERT INTO author(id, name, updated_at)
-		VALUES($1, $2, NOW())
-	`
+			INSERT INTO "user" (
+				id,
+				name, 
+				balance,
+				updated_at
+			)
+			VALUES($1, $2, $3, NOW())
+		`
 
-	_, err := a.db.Exec(query, id, req.Name)
+	_, err := u.db.Exec(query, id, req.Name, req.Balance)
 	if err != nil {
 		return "", err
 	}
@@ -39,38 +44,40 @@ func (a *authorRepo) Create(req *models.CreateAuthor) (string, error) {
 	return id, nil
 }
 
-func (a *authorRepo) GetById(req *models.AuthorPrimaryKey) (*models.Author, error) {
+func (a *userRepo) GetById(req *models.UserPrimaryKey) (*models.User, error) {
 	var (
-		query  string
-		author models.Author
+		query string
+		user  models.User
 	)
 
 	query = `
-		SELECT
+		SELECT 
 			id,
 			name, 
+			balance,
 			created_at,
 			updated_at
-		FROM author
+		FROM "user"
 		WHERE id = $1
 	`
 
 	err := a.db.QueryRow(query, req.Id).Scan(
-		&author.Id,
-		&author.Name,
-		&author.CreatedAt,
-		&author.UpdatedAt,
+		&user.Id,
+		&user.Name,
+		&user.Balance,
+		&user.CreatedAt,
+		&user.UpdatedAt,
 	)
 
 	if err != nil {
 		return nil, err
 	}
 
-	return &author, nil
+	return &user, nil
 }
 
-func (a *authorRepo) GetList(req *models.GetListAuthorRequest) (*models.GetListAuthorResponse, error) {
-	resp := &models.GetListAuthorResponse{}
+func (b *userRepo) GetList(req *models.GetListUserRequest) (*models.GetListUserResponse, error) {
+	resp := &models.GetListUserResponse{}
 
 	var (
 		query  string
@@ -83,9 +90,10 @@ func (a *authorRepo) GetList(req *models.GetListAuthorRequest) (*models.GetListA
 		SELECT 
 			id,
 			name,
+			balance,
 			created_at,
 			updated_at
-		FROM author
+		FROM "user"
 	`
 
 	if len(req.Search) > 0 {
@@ -102,34 +110,37 @@ func (a *authorRepo) GetList(req *models.GetListAuthorRequest) (*models.GetListA
 
 	query += filter + offset + limit
 
-	rows, err := a.db.Query(query)
+	rows, err := b.db.Query(query)
 	if err != nil {
 		return nil, err
 	}
 
+	defer rows.Close()
+
 	for rows.Next() {
-		var author models.Author
+		var user models.User
 
 		err = rows.Scan(
-			&author.Id,
-			&author.Name,
-			&author.CreatedAt,
-			&author.UpdatedAt,
+			&user.Id,
+			&user.Name,
+			&user.Balance,
+			&user.CreatedAt,
+			&user.UpdatedAt,
 		)
 
 		if err != nil {
 			return nil, err
 		}
 
-		resp.Authors = append(resp.Authors, &author)
+		resp.Users = append(resp.Users, &user)
 	}
 
-	resp.Count = len(resp.Authors)
+	resp.Count = len(resp.Users)
 
 	return resp, nil
 }
 
-func (a *authorRepo) Update(req *models.UpdateAuthor) (int64, error) {
+func (b *userRepo) Update(req *models.UpdateUser) (int64, error) {
 	var (
 		query  string
 		params map[string]interface{}
@@ -137,20 +148,22 @@ func (a *authorRepo) Update(req *models.UpdateAuthor) (int64, error) {
 
 	query = `
 		UPDATE 
-			author
+			"user"
 		SET 
 			name = :name,
+			balance = :balance,
 			updated_at = now()
 		WHERE id = :id
 	`
 
 	params = map[string]interface{}{
-		"id":   req.Id,
-		"name": req.Name,
+		"id":      req.Id,
+		"name":    req.Name,
+		"balance": req.Balance,
 	}
 
 	query, args := helper.ReplaceQueryParams(query, params)
-	result, err := a.db.Exec(query, args...)
+	result, err := b.db.Exec(query, args...)
 	if err != nil {
 		return 0, err
 	}
@@ -163,17 +176,17 @@ func (a *authorRepo) Update(req *models.UpdateAuthor) (int64, error) {
 	return rowsAffected, nil
 }
 
-func (a *authorRepo) Delete(req *models.AuthorPrimaryKey) error {
+func (b *userRepo) Delete(req *models.UserPrimaryKey) error {
 	var (
 		query string
 	)
 
 	query = `
-		DELETE FROM author
+		DELETE FROM "user"
 		WHERE id = $1
 	`
 
-	_, err := a.db.Exec(query, req.Id)
+	_, err := b.db.Exec(query, req.Id)
 	if err != nil {
 		return err
 	}

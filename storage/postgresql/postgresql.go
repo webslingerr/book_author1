@@ -14,6 +14,7 @@ type Store struct {
 	db     *sql.DB
 	book   storage.BookRepoI
 	author storage.AuthorRepoI
+	user   storage.UserRepoI
 }
 
 func NewConnectPostgresql(cfg *config.Config) (storage.StorageI, error) {
@@ -39,6 +40,7 @@ func NewConnectPostgresql(cfg *config.Config) (storage.StorageI, error) {
 		db:     db,
 		book:   NewBookRepo(db),
 		author: NewAuthorRepo(db),
+		user: NewUserRepo(db),
 	}, nil
 }
 
@@ -58,4 +60,11 @@ func (s *Store) Author() storage.AuthorRepoI {
 		s.author = NewAuthorRepo(s.db)
 	}
 	return s.author
+}
+
+func (s *Store) User() storage.UserRepoI {
+	if s.user == nil {
+		s.user = NewUserRepo(s.db)
+	}
+	return s.user
 }

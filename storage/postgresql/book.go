@@ -1,7 +1,8 @@
 package postgresql
 
 import (
-	"app/models"
+	"app/api/models"
+	"app/pkg/helper"
 	"database/sql"
 	"fmt"
 
@@ -28,14 +29,26 @@ func (b *bookRepo) Create(req *models.CreateBook) (string, error) {
 		INSERT INTO book(
 			id, 
 			name,
-			price, 
+			count,
+			income_price,
+			profit_status,
+			profit_price,
 			author_id,
 			updated_at
 		)
-		VALUES($1, $2, $3, $4, NOW())
+		VALUES($1, $2, $3, $4, $5, $6, $7, NOW())
 	`
 
-	_, err := b.db.Exec(query, id, req.Name, req.Price, req.AuthorId)
+	_, err := b.db.Exec(
+		query,
+		id,
+		req.Name,
+		req.Count,
+		req.IncomePrice,
+		req.ProfitStatus,
+		req.ProfitPrice,
+		req.AuthorId,
+	)
 	if err != nil {
 		return "", err
 	}
@@ -47,29 +60,36 @@ func (b *bookRepo) GetById(req *models.BookPrimaryKey) (*models.Book, error) {
 	var (
 		query string
 		book  models.Book
-		author models.ReturnAuther
 	)
 
 	query = `
 		SELECT
 			b.id,
 			b.name, 
-			price,
-			a.id,
-			a.name,
-			b.created_at,
+			count,
+			income_price,
+			profit_status,
+			profit_price,
+			sell_price,
+			COALESCE(a.id, ''),
+			COALESCE(a.name, ''),
+			TO_CHAR(b.created_at, 'YYYY-MM-DD HH24-MI-SS'),
 			b.updated_at
 		FROM book AS b
-		JOIN author AS a ON a.id = b.author_id
+		LEFT JOIN author AS a ON a.id = b.author_id
 		WHERE b.id = $1
 	`
 
 	err := b.db.QueryRow(query, req.Id).Scan(
 		&book.Id,
 		&book.Name,
-		&book.Price,
-		&author.Id,
-		&author.Name,
+		&book.Count,
+		&book.IncomePrice,
+		&book.ProfitStatus,
+		&book.ProfitPrice,
+		&book.SellPrice,
+		&book.Author.Id,
+		&book.Author.Name,
 		&book.CreatedAt,
 		&book.UpdatedAt,
 	)
@@ -77,8 +97,6 @@ func (b *bookRepo) GetById(req *models.BookPrimaryKey) (*models.Book, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	book.Author = author
 
 	return &book, nil
 }
@@ -91,14 +109,10 @@ func (b *bookRepo) GetList(req *models.GetListBookRequest) (*models.GetListBookR
 		filter = " WHERE TRUE "
 		offset = " OFFSET 0 "
 		limit  = " LIMIT 10"
-
-		book models.Book
-		author models.ReturnAuther
 	)
 
 	query = `
 		SELECT 
-			COUNT(*) OVER(),
 			b.id,
 			b.name, 
 			price,
@@ -107,7 +121,7 @@ func (b *bookRepo) GetList(req *models.GetListBookRequest) (*models.GetListBookR
 			b.created_at,
 			b.updated_at
 		FROM book AS b
-		JOIN author AS a ON a.id = b.author_id
+		LEFT JOIN author AS a ON a.id = b.author_id
 	`
 
 	if len(req.Search) > 0 {
@@ -132,11 +146,17 @@ func (b *bookRepo) GetList(req *models.GetListBookRequest) (*models.GetListBookR
 	defer rows.Close()
 
 	for rows.Next() {
+		var book models.Book
+		var author models.ReturnAuthor
+
 		err = rows.Scan(
-			&resp.Count,
 			&book.Id,
 			&book.Name,
-			&book.Price,
+			&book.Count,
+			&book.IncomePrice,
+			&book.ProfitStatus,
+			&book.ProfitPrice,
+			&book.SellPrice,
 			&author.Id,
 			&author.Name,
 			&book.CreatedAt,
@@ -151,27 +171,53 @@ func (b *bookRepo) GetList(req *models.GetListBookRequest) (*models.GetListBookR
 		resp.Books = append(resp.Books, &book)
 	}
 
+	resp.Count = len(resp.Books)
+
 	return resp, nil
 }
 
-func (b *bookRepo) Update(req *models.UpdateBook) error {
+func (b *bookRepo) Update(req *models.UpdateBook) (int64, error) {
 	var (
-		query string
+		query  string
+		params map[string]interface{}
 	)
 
 	query = `
 		UPDATE 
-			book 
-		SET name = $1, price = $2, author_id = $3
-		WHERE id = $4
+			book
+		SET 
+			name = :name,
+			count = :count,
+			income_price = :income_price,
+			profit_status = :profit_status,
+			profit_price = :profit_price,
+			author_id = :author_id,
+			updated_at = now()
+		WHERE id = :id
 	`
 
-	_, err := b.db.Exec(query, req.Name, req.Price, req.AuthorId, req.Id)
-	if err != nil {
-		return err
+	params = map[string]interface{}{
+		"id":            req.Id,
+		"name":          req.Name,
+		"count":         req.Count,
+		"income_price":  req.IncomePrice,
+		"profit_status": req.ProfitStatus,
+		"profit_price":  req.ProfitPrice,
+		"author_id":     req.AuthorId,
 	}
 
-	return nil
+	query, args := helper.ReplaceQueryParams(query, params)
+	result, err := b.db.Exec(query, args...)
+	if err != nil {
+		return 0, err
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return 0, err
+	}
+
+	return rowsAffected, nil
 }
 
 func (b *bookRepo) Delete(req *models.BookPrimaryKey) error {
