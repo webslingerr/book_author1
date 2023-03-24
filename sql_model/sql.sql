@@ -1,0 +1,15 @@
+CREATE TABLE author (
+    id VARCHAR PRIMARY KEY,
+    name VARCHAR NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP
+);
+
+CREATE TABLE book (
+    id VARCHAR PRIMARY KEY,
+    name VARCHAR NOT NULL,
+    price VARCHAR NOT NULL,
+    author_id VARCHAR NOT NULL REFERENCES author(id),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP
+);
